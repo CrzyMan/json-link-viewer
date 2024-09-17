@@ -84,7 +84,8 @@ teams/{team_UID}/groups/{group_UID}/stages/{stage_IDX} -> teams/{team_UID}/group
 	let tree = $derived(build_tree(trigger_definitions));
 
 	/** @type {SvelteSet<string>} */
-	let paths_to_highlight = new SvelteSet();
+	let effect_paths_to_highlight = new SvelteSet();
+	let source_path_to_highlight = $state('');
 
 	// let trigger_def_array = $state([]);
 
@@ -93,6 +94,7 @@ teams/{team_UID}/groups/{group_UID}/stages/{stage_IDX} -> teams/{team_UID}/group
 		source_path: string;
 		effect_path: string;
 		relationship: string;
+		text_pos: {x: number, y: number}
 		arrow_path: string;
 	 }} Arrow
 	*/
@@ -140,17 +142,23 @@ teams/{team_UID}/groups/{group_UID}/stages/{stage_IDX} -> teams/{team_UID}/group
 			let jutting = 20 + (Math.abs(source_rect.y - effect_rect.y)*0.5)
 			
 			let arrow_path = `
-				M${source_rect.x - svg_rect.x + source_rect.width + 5},${source_rect.y - svg_rect.y + source_rect.height*0.5} 
-				C${source_rect.x- svg_rect.x + source_rect.width + 5 + jutting},${source_rect.y - svg_rect.y + source_rect.height*0.5}
-				${effect_rect.x- svg_rect.x + effect_rect.width + 5 + jutting},${effect_rect.y - svg_rect.y + effect_rect.height*0.5}
-				${effect_rect.x- svg_rect.x + effect_rect.width + 5},${effect_rect.y - svg_rect.y + effect_rect.height*0.5}`;
+				M${source_rect.x - svg_rect.x + source_rect.width + 5},${source_rect.y - svg_rect.y + source_rect.height - 7} 
+				C${source_rect.x- svg_rect.x + source_rect.width + 5 + jutting},${source_rect.y - svg_rect.y + source_rect.height - 7}
+				${effect_rect.x- svg_rect.x + effect_rect.width + 5 + jutting},${effect_rect.y - svg_rect.y + 7}
+				${effect_rect.x- svg_rect.x + effect_rect.width + 5},${effect_rect.y - svg_rect.y + 7}`;
 
-			/** @type {{source_path: string, effect_path: string, relationship: string, arrow_path: string}} */
+			let text_pos = {
+				x: effect_rect.x - svg_rect.x + effect_rect.width + 20,
+				y: effect_rect.y - svg_rect.y
+			}
+
+			/** @type {Arrow} */
 			let arrow = {
 				source_path,
 				effect_path,
 				relationship,
-				arrow_path
+				arrow_path,
+				text_pos,
 			};
 			result.push(arrow);
 		}
@@ -170,8 +178,9 @@ teams/{team_UID}/groups/{group_UID}/stages/{stage_IDX} -> teams/{team_UID}/group
 	>
 		<div 
 			class="
-				key w-min flex items-center
-				{paths_to_highlight.has(root_node.path) ? "bg-yellow-200/50" : ""}
+				key w-max flex items-center
+				{effect_paths_to_highlight.has(root_node.path) ? "bg-yellow-200/50" : ""}
+				hover:bg-yellow-200/50
 			"
 			onmouseenter={() => {
 				console.log(`ADDING ${root_node.path}`);
@@ -179,16 +188,16 @@ teams/{team_UID}/groups/{group_UID}/stages/{stage_IDX} -> teams/{team_UID}/group
 					return;
 				}
 				for (let effect of root_node.effects){
-					paths_to_highlight.add(effect.path);
+					effect_paths_to_highlight.add(effect.path);
 				}
-				paths_to_highlight.add(root_node.path);
+				source_path_to_highlight = root_node.path;
 			}}
 			onmouseleave={() => {
 				console.log(`DELETING ${root_node.path}`);
 				for (let effect of root_node.effects ?? []){
-					paths_to_highlight.delete(effect.path);
+					effect_paths_to_highlight.delete(effect.path);
 				}
-				paths_to_highlight.delete(root_node.path);
+				source_path_to_highlight = '';
 			}}
 		>
 			{root_node.key}/
@@ -204,11 +213,8 @@ teams/{team_UID}/groups/{group_UID}/stages/{stage_IDX} -> teams/{team_UID}/group
 {/snippet}
 
 <div class="p-6">
-	<textarea class="w-full h-[8rem]" bind:value={trigger_definitions}></textarea>
-	<details>
-		<summary>Code</summary>
-		<CodeBlock language="javascript" code={JSON.stringify(tree, null, 2)}></CodeBlock>
-	</details>
+	<textarea class="w-full h-[13rem]" bind:value={trigger_definitions}></textarea>
+
 	<div class="bg-white rounded px-4 py-2 relative z-0">
 		{#each tree.children as root_node}
 			{@render tree_display(root_node)}
@@ -230,7 +236,7 @@ teams/{team_UID}/groups/{group_UID}/stages/{stage_IDX} -> teams/{team_UID}/group
 			{#each arrows as arrow}
 				<path
 					fill="none"
-					stroke={paths_to_highlight.has('root/' + arrow.source_path) ? "yellow" : "transparent"}
+					stroke={effect_paths_to_highlight.has('root/' + arrow.effect_path) ? "yellow" : "transparent"}
 					opacity="50%"
 					stroke-width="7"
 					stroke-linecap="round"
@@ -244,6 +250,13 @@ teams/{team_UID}/groups/{group_UID}/stages/{stage_IDX} -> teams/{team_UID}/group
 					marker-end="url(#arrow)"
 					d={arrow.arrow_path}
 				/>
+				<text
+					x={arrow.text_pos.x} y={arrow.text_pos.y}
+					style="transform: translate(0px, 1.1rem);"
+					fill={effect_paths_to_highlight.has('root/' + arrow.effect_path) ? "black" : "transparent"}
+				>
+					{arrow.relationship}
+				</text>
 			{/each}
 		</svg>
 	</div>
