@@ -2,9 +2,8 @@
     import { CodeBlock } from '@skeletonlabs/skeleton';
 	import { SvelteSet } from 'svelte/reactivity';
 
-	let trigger_definitions = $state(`teams/{team_UID}/groups/{group_UID}/stages/{stage_IDX} -> teams/{team_UID}/groups/{group_UID}/pipelineDetails/stages/{stage_IDX} : Reduced detail for easy get
-teams/{team_UID}/groups/{group_UID}/members/{user_UID}/groupAccess -> users/{user_UID}/groupAccess/{group_UID} : Team access controls the user's access
-teams/{team_UID}/groups/{group_UID}/stages/{stage_IDX} -> teams/{team_UID}/groups/{group_UID}/pipelineDetails/stuff/{stage_IDX} : Reduced detail for easy get`);
+	let trigger_definitions = $state(`prop/path/1 -> prop/path/3
+prop/path/1 -> prop/path/2 : relationship`);
 
 	/**
 	 @typedef {string} SchemaPath e.g. 'path/to/{dynamic}/resource'
@@ -12,7 +11,7 @@ teams/{team_UID}/groups/{group_UID}/stages/{stage_IDX} -> teams/{team_UID}/group
  	*/
 	/**
 	 @typedef {{path: SchemaPath, relationship: string}} TriggerEffect
-	 @typedef {{key: string, path: SchemaPath, effects?: TriggerEffect[], children: TreeNode[]}} TreeNode
+	 @typedef {{key: string, path: SchemaPath, effects: TriggerEffect[], sources: TriggerEffect[], children: TreeNode[]}} TreeNode
 	*/
 
 	/**
@@ -26,7 +25,9 @@ teams/{team_UID}/groups/{group_UID}/stages/{stage_IDX} -> teams/{team_UID}/group
 			let root = {
 				key: 'root',
 				path: 'root',
-				children: []
+				children: [],
+                effects: [],
+                sources: []
 			};
 
 			let trigger_defs = /** @type {TriggerDefinition[]} */ (triggers.split(/\n+/).map(t => t.trim()).filter(t => t));
@@ -44,18 +45,21 @@ teams/{team_UID}/groups/{group_UID}/stages/{stage_IDX} -> teams/{team_UID}/group
 						child_node = {
 							key: next_key,
 							path: `${ref_node.path}/${next_key}`,
-							children: []
+							children: [],
+                            effects: [],
+                            sources: []
 						}
 						ref_node.children.push(child_node);
+                        ref_node.children.sort((a, b) => a.key.localeCompare(b.key));
 					}
 
-					if (next_key == source_props.at(-1)){
-						child_node.effects ??= [];
-						child_node.effects?.push({
+					if (next_key === source_props.at(-1)){
+						child_node.effects.push({
 							path: `root/${effect_path}`,
 							relationship
-						})
+						});
 					}
+
 					ref_node = child_node;
 				}
 				ref_node = root;
@@ -65,14 +69,26 @@ teams/{team_UID}/groups/{group_UID}/stages/{stage_IDX} -> teams/{team_UID}/group
 						child_node = {
 							key: next_key,
 							path: `${ref_node.path}/${next_key}`,
-							children: []
+							children: [],
+                            effects: [],
+                            sources: []
 						};
 						ref_node.children.push(child_node);
+                        ref_node.children.sort((a, b) => a.key.localeCompare(b.key));
 					}
+
+                    if (next_key === effect_props.at(-1)){
+						child_node.sources.push({
+							path: `root/${source_path}`,
+							relationship
+						});
+					}
+
 					ref_node = child_node;
 				}
 			}
 			most_recent_valid_tree = root;
+            console.log(most_recent_valid_tree);
 			return root;
 		} catch (e) {
 			return most_recent_valid_tree;
@@ -85,7 +101,12 @@ teams/{team_UID}/groups/{group_UID}/stages/{stage_IDX} -> teams/{team_UID}/group
 
 	/** @type {SvelteSet<string>} */
 	let effect_paths_to_highlight = new SvelteSet();
-	let source_path_to_highlight = $state('');
+
+    /** @type {SvelteSet<string>} */
+	let source_paths_to_highlight = new SvelteSet();
+
+    /** @type {SvelteSet<string>} */
+    let hover_paths = new SvelteSet();
 
 	// let trigger_def_array = $state([]);
 
@@ -175,45 +196,76 @@ teams/{team_UID}/groups/{group_UID}/stages/{stage_IDX} -> teams/{team_UID}/group
 			relative z-10
 			border-l border-solid
 		"
+        style:--override-bg={effect_paths_to_highlight.has(root_node.path) ? "rgb(254 240 138 / 0.5)" : ""}
 	>
 		<div 
-			class="
-				key w-max flex items-center
-				{effect_paths_to_highlight.has(root_node.path) ? "bg-yellow-200/50" : ""}
-				hover:bg-yellow-200/50
-			"
+			class=" key w-max flex items-center "
+            
+            style="background-color: var(--override-bg, {source_paths_to_highlight.has(root_node.path) ? "rgb(254 240 138 / 0.5)" : ""})"
+
 			onmouseenter={() => {
-				console.log(`ADDING ${root_node.path}`);
-				if (!root_node.effects || (root_node.effects?.length ?? 0) === 0){
-					return;
-				}
-				for (let effect of root_node.effects){
-					effect_paths_to_highlight.add(effect.path);
-				}
-				source_path_to_highlight = root_node.path;
+
+                hover_paths.add(root_node.path);
+                console.log("hover paths: ", [...hover_paths]);
+               
+                if (root_node.effects.length > 0){
+                   console.log(`ADDING SOURCE ${root_node.path}`)
+                    source_paths_to_highlight.add(root_node.path);
+    				for (let effect of root_node.effects){
+                        console.log(`> ADDING EFFECT ${effect.path}`);
+    					effect_paths_to_highlight.add(effect.path);
+    				}
+                }
+
+                if (root_node.sources.length > 0){
+                   console.log(`ADDING EFFECT ${root_node.path}`)
+                    effect_paths_to_highlight.add(root_node.path);
+    				for (let source of root_node.sources){
+                        console.log(`> ADDING SOURCE ${source.path}`);
+    					source_paths_to_highlight.add(source.path);
+    				}
+                }
 			}}
 			onmouseleave={() => {
-				console.log(`DELETING ${root_node.path}`);
-				for (let effect of root_node.effects ?? []){
-					effect_paths_to_highlight.delete(effect.path);
-				}
-				source_path_to_highlight = '';
+                hover_paths.delete(root_node.path);
+                console.log("hover paths: ", [...hover_paths]);
+
+                if (root_node.effects.length > 0){
+    				console.log(`DELETING SOURCE ${root_node.path}`);
+                    source_paths_to_highlight.delete(root_node.path);
+    				for (let effect of root_node.effects){
+                        console.log(`> DELETING EFFECT ${effect.path}`);
+    					effect_paths_to_highlight.delete(effect.path);
+    				}
+                }
+
+                if (root_node.sources.length > 0){
+                    console.log(`DELETING EFFECT ${root_node.path}`);
+                    effect_paths_to_highlight.delete(root_node.path);
+    				for (let source of root_node.sources){
+                        console.log(`> DELETING SOURCE ${source.path}`);
+    					source_paths_to_highlight.delete(source.path);
+    				}
+                }
 			}}
 		>
-			{root_node.key}/
+			
+            {#if root_node.children?.length === 0}
+                {@html `${root_node.key}/: {...}`}
+            {:else}
+                {root_node.key}/
+            {/if}
 		</div>
 		<div class="pl-4">
 			{#each (root_node.children ?? []) as child_node}
 				{@render tree_display(child_node)}
-			{:else}
-				{@html "{ ... }"}
 			{/each}
 		</div>
 	</div>
 {/snippet}
 
-<div class="p-6">
-	<textarea class="w-full h-[13rem]" bind:value={trigger_definitions}></textarea>
+<div class="p-6 font-mono">
+	<textarea class="w-full h-[13rem] rounded" bind:value={trigger_definitions}></textarea>
 
 	<div class="bg-white rounded px-4 py-2 relative z-0">
 		{#each tree.children as root_node}
@@ -241,6 +293,7 @@ teams/{team_UID}/groups/{group_UID}/stages/{stage_IDX} -> teams/{team_UID}/group
 					stroke-width="7"
 					stroke-linecap="round"
 					d={arrow.arrow_path}
+                    style="z-index: 1;"
 				/>
 				<path
 					fill="none"
@@ -249,11 +302,19 @@ teams/{team_UID}/groups/{group_UID}/stages/{stage_IDX} -> teams/{team_UID}/group
 					stroke-linecap="round"
 					marker-end="url(#arrow)"
 					d={arrow.arrow_path}
+                    style="z-index: 1;"
 				/>
+            {/each}
+            {#each arrows as arrow}
+                {@const should_show = hover_paths.has(`root/${arrow.effect_path}`) || effect_paths_to_highlight.has(`root/${arrow.effect_path}`)}
 				<text
 					x={arrow.text_pos.x} y={arrow.text_pos.y}
-					style="transform: translate(0px, 1.1rem);"
-					fill={effect_paths_to_highlight.has('root/' + arrow.effect_path) ? "black" : "transparent"}
+					style="z-index: 2; transform: translate(0px, 1.1rem)"
+					fill={should_show ? "black" : "transparent"}
+                    stroke-width="5"
+                    stroke-linejoin="round"
+                    stroke={should_show ? "hsl(0 0% 100% / 90%)" : "transparent"}
+                    paint-order="stroke"
 				>
 					{arrow.relationship}
 				</text>
