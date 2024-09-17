@@ -88,7 +88,6 @@ prop/path/1 -> prop/path/2 : relationship`);
 				}
 			}
 			most_recent_valid_tree = root;
-            console.log(most_recent_valid_tree);
 			return root;
 		} catch (e) {
 			return most_recent_valid_tree;
@@ -185,7 +184,29 @@ prop/path/1 -> prop/path/2 : relationship`);
 		}
 		return result;
 	}
+
+    /**
+     * 
+     * @param {() => void} callback
+     */
+    function debounced(callback){
+        /** @type {any} */
+        let timeout_id;
+        return () => {
+            clearTimeout(timeout_id);
+            timeout_id = setTimeout(
+                callback,
+                100
+            );
+        }
+    }
+
+    function regenerate_svg(){
+        arrows = generate_arrow_paths(trigger_definitions);
+    }
 </script>
+
+<svelte:window onresize={debounced(regenerate_svg)}/>
 
 {#snippet tree_display(/** @type {TreeNode} */ n)}
 	{@const root_node = /** @type {TreeNode} */ (n)}
