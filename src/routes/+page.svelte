@@ -111,7 +111,7 @@ prop/path/1 -> prop/path/2 : relationship`);
 							sources: [],
 						};
 						ref_node.children.push(child_node);
-						ref_node.children.sort((a, b) => a.key.localeCompare(b.key, {}, { ignorePunctuation: true, caseFirst: false }));
+						ref_node.children.sort((a, b) => a.key.localeCompare(b.key, undefined, { ignorePunctuation: true, caseFirst: "false" }));
 					}
 
 					if (next_key === effect_props.at(-1)) {
