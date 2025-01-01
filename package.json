@@ -26,6 +26,7 @@
 	"type": "module",
 	"dependencies": {
 		"@sveltejs/adapter-cloudflare": "^4.7.2",
+		"brotli-wasm": "^3.0.1",
 		"highlight.js": "^11.10.0"
 	}
 }

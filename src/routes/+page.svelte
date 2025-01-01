@@ -1,9 +1,43 @@
 <script>
-	import { CodeBlock } from "@skeletonlabs/skeleton";
 	import { SvelteSet } from "svelte/reactivity";
 
-	let trigger_definitions = $state(`prop/path/1 -> prop/path/3
+	let trigger_definitions = $state(`// Comments
+prop/path/1 -> prop/path/3 /* inline comments */
 prop/path/1 -> prop/path/2 : relationship`);
+
+	// let brotli;
+
+	// $effect(() => {
+	//     trigger_definitions;
+	//     (async () => {
+	//         if (!brotli) {
+	//             console.log("Loading Brotli");
+	//             let brotliPromise = await import("https://unpkg.com/brotli-wasm@3.0.0/index.web.js?module");
+	//             brotli = await brotliPromise.default;
+	//         } else {
+	//             console.log("Already loaded Brotli");
+	//         }
+	//         encode_string(trigger_definitions);
+	//     })();
+	// });
+
+	// /**
+	//  * @param str
+	//  * @returns {string}
+	//  */
+	// function encode_string(str) {
+	//     console.log("raw string length: ", trigger_definitions.length);
+	//     console.log("btoa string length: ", btoa(trigger_definitions).length);
+	//     let uncompressed_raw_data = new TextEncoder().encode(trigger_definitions);
+	//     let uncompressed_btoa_data = new TextEncoder().encode(btoa(trigger_definitions));
+	//     /** @type {Uint8Array}*/
+	//     let compressed_raw_data = brotli.compress(uncompressed_raw_data);
+	//     let compressed_btoa_data = brotli.compress(uncompressed_btoa_data);
+	//     console.log("raw string to compressed Uint8[] length: ", compressed_raw_data.length);
+	//     console.log("btoa string to compressed Uint8[] length: ", compressed_btoa_data.length);
+
+	//     return "";
+	// }
 
 	/**
 	 @typedef {string} SchemaPath e.g. 'path/to/{dynamic}/resource'
@@ -31,7 +65,7 @@ prop/path/1 -> prop/path/2 : relationship`);
 			};
 
 			let trigger_defs = markdown_to_path_defs(triggers);
-			console.log(trigger_defs);
+			// console.log(trigger_defs);
 
 			// Compose the full object
 			for (let trigger_def of trigger_defs) {
@@ -52,7 +86,7 @@ prop/path/1 -> prop/path/2 : relationship`);
 						};
 						ref_node.children.push(child_node);
 						/** @ts-ignore */
-						ref_node.children.sort((a, b) => a.key.localeCompare(b.key, {}, {ignorePunctuation: true, caseFirst: false}));
+						ref_node.children.sort((a, b) => a.key.localeCompare(b.key, {}, { ignorePunctuation: true, caseFirst: false }));
 					}
 
 					if (next_key === source_props.at(-1)) {
@@ -76,7 +110,7 @@ prop/path/1 -> prop/path/2 : relationship`);
 							sources: [],
 						};
 						ref_node.children.push(child_node);
-						ref_node.children.sort((a, b) => a.key.localeCompare(b.key, {}, {ignorePunctuation: true, caseFirst: false}));
+						ref_node.children.sort((a, b) => a.key.localeCompare(b.key, {}, { ignorePunctuation: true, caseFirst: false }));
 					}
 
 					if (next_key === effect_props.at(-1)) {
@@ -235,6 +269,7 @@ prop/path/1 -> prop/path/2 : relationship`);
 			triggers
 				.replaceAll(/\/\*(.|\n)*?\*\//g, "")
 				.replaceAll(/\/\/.*?(\n|^)/g, "\n")
+				.replaceAll(/ +/g, " ")
 				.split(/(\n\s*)+/)
 				.map((t) => t.trim())
 				.filter((t) => t)
@@ -244,7 +279,7 @@ prop/path/1 -> prop/path/2 : relationship`);
 
 <svelte:window onresize={debounced(regenerate_svg)} />
 
-{#snippet tree_display(/** @type {TreeNode} */ n)}
+{#snippet tree_display(/** @type {TreeNode} */ n, depth = 0)}
 	{@const root_node = /** @type {TreeNode} */ (n)}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
@@ -253,7 +288,11 @@ prop/path/1 -> prop/path/2 : relationship`);
 			relative z-10
 			border-l border-solid
 			pointer-events-none
+			pl-[10px]
+			tree-node
 		`)}
+		style:--hue={`${depth * 60}`}
+		style:border-color={`lch(70% 100 var(--hue))`}
 		style:--override-bg={effect_paths_to_highlight.has(root_node.path) ? "var(--highlight-yellow)" : ""}
 	>
 		<div
@@ -314,7 +353,7 @@ prop/path/1 -> prop/path/2 : relationship`);
 		</div>
 		<div class="pl-4 pointer-events-none">
 			{#each root_node.children ?? [] as child_node}
-				{@render tree_display(child_node)}
+				{@render tree_display(child_node, depth + 1)}
 			{/each}
 		</div>
 	</div>
@@ -327,7 +366,7 @@ prop/path/1 -> prop/path/2 : relationship`);
 	></textarea>
 
 	<div
-		class="bg-white rounded px-4 py-2 relative z-0"
+		class="bg-white rounded px-4 py-2 relative z-0 tree-holder"
 		style:--highlight-yellow="rgb(254 240 138 / 80%)"
 	>
 		{#each tree.children as root_node}
@@ -403,3 +442,21 @@ prop/path/1 -> prop/path/2 : relationship`);
 		</svg>
 	</div>
 </div>
+
+<style>
+	.tree-node > :first-child {
+		border-color: inherit;
+		position: relative;
+		&::before {
+			content: "";
+			position: absolute;
+			right: calc(100% + 3px);
+			height: 0;
+			top: 50%;
+			width: 7px;
+			border-top-style: solid;
+			border-top-width: 1px;
+			border-color: inherit;
+		}
+	}
+</style>
