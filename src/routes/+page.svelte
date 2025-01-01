@@ -1,4 +1,5 @@
 <script>
+	import { SlideToggle } from "@skeletonlabs/skeleton";
 	import { SvelteSet } from "svelte/reactivity";
 
 	let trigger_definitions = $state(`// Comments
@@ -275,6 +276,10 @@ prop/path/1 -> prop/path/2 : relationship`);
 				.filter((t) => t)
 		);
 	}
+
+	let show_text_always_toggle = $state(false);
+	/** @type {"always" | "hover"} */
+	let relationship_text_display = $derived(show_text_always_toggle ? "always" : "hover");
 </script>
 
 <svelte:window onresize={debounced(regenerate_svg)} />
@@ -292,14 +297,16 @@ prop/path/1 -> prop/path/2 : relationship`);
 			tree-node
 		`)}
 		style:--hue={`${depth * 60}`}
+		style:--level={depth}
 		style:border-color={`lch(70% 100 var(--hue))`}
 		style:--override-bg={effect_paths_to_highlight.has(root_node.path) ? "var(--highlight-yellow)" : ""}
 	>
 		<div
 			class="key w-max flex items-center pointer-events-auto"
-			style="background-color: var(--override-bg, {source_paths_to_highlight.has(root_node.path) ? 'var(--highlight-yellow)' : (
+			style:background-color="var(--override-bg, {source_paths_to_highlight.has(root_node.path) ? 'var(--highlight-yellow)' : (
 				'hsl(0 0% 100% / 80%)'
-			)})"
+			)}"
+			style:z-index="calc(100 - var(--level))"
 			onmouseenter={() => {
 				hover_paths.add(root_node.path);
 				console.log("hover paths: ", [...hover_paths]);
@@ -359,19 +366,34 @@ prop/path/1 -> prop/path/2 : relationship`);
 	</div>
 {/snippet}
 
-<div class="p-6 font-mono">
+<div class="p-6 font-mono space-y-5">
 	<textarea
 		class="w-full h-[13rem] rounded"
 		bind:value={trigger_definitions}
 	></textarea>
 
+	<div>
+		<h2 class="h3">Display relationship Text</h2>
+		<label class="flex items-center gap-2">
+			<span>On Hover</span>
+			<SlideToggle
+				name="show_text_on_hover_or_always"
+				bind:checked={show_text_always_toggle}
+				size="sm"
+			/>
+			<span>Always</span>
+		</label>
+	</div>
+
 	<div
 		class="bg-white rounded px-4 py-2 relative z-0 tree-holder"
 		style:--highlight-yellow="rgb(254 240 138 / 80%)"
 	>
-		{#each tree.children as root_node}
-			{@render tree_display(root_node)}
-		{/each}
+		<div>
+			{#each tree.children as root_node}
+				{@render tree_display(root_node)}
+			{/each}
+		</div>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<svg class="absolute left-0 right-0 top-0 bottom-0 w-full h-full z-0">
 			<defs>
@@ -424,7 +446,10 @@ prop/path/1 -> prop/path/2 : relationship`);
 			{/each}
 			<!-- Text after arrows to ensure they aren't drawn under any arrows -->
 			{#each arrows as arrow}
-				{@const should_show_text = hover_paths.has(`root/${arrow.effect_path}`) || effect_paths_to_highlight.has(`root/${arrow.effect_path}`)}
+				{@const should_show_text =
+					hover_paths.has(`root/${arrow.effect_path}`) ||
+					effect_paths_to_highlight.has(`root/${arrow.effect_path}`) ||
+					relationship_text_display === "always"}
 				<text
 					x={arrow.text_pos.x}
 					y={arrow.text_pos.y}
@@ -444,19 +469,37 @@ prop/path/1 -> prop/path/2 : relationship`);
 </div>
 
 <style>
-	.tree-node > :first-child {
-		border-color: inherit;
-		position: relative;
-		&::before {
+	.tree-node {
+		&:last-child::before {
+			border-color: lch(90% 10 var(--hue));
 			content: "";
+			height: 100%;
 			position: absolute;
-			right: calc(100% + 3px);
-			height: 0;
-			top: 50%;
-			width: 7px;
-			border-top-style: solid;
-			border-top-width: 1px;
+			border-style: solid;
+			border-left-width: 1px;
+			right: 100%;
+			box-sizing: border-box;
+		}
+
+		& > :first-child {
 			border-color: inherit;
+			position: relative;
+			/* position: sticky; */
+			/* top: calc(var(--level, 0) * 1rem); */
+
+			&::before {
+				content: "";
+				position: absolute;
+				right: calc(100% + 4px);
+				height: 0.9rem;
+				bottom: calc(50% - 1px);
+				width: 7px;
+				border-style: solid;
+				border-width: 1px;
+				border-color: inherit;
+				border-right: none;
+				border-top: none;
+			}
 		}
 	}
 </style>
