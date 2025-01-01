@@ -353,7 +353,7 @@ prop/path/1 -> prop/path/2 : relationship`);
 			}}
 		>
 			{#if root_node.children?.length === 0}
-				{@html `${sanitizeHTML(root_node.key)}/: {...}`}
+				{@html `${sanitizeHTML(root_node.key)}: {...}`}
 			{:else}
 				{root_node.key}/
 			{/if}
