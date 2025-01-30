@@ -10,7 +10,7 @@
     import { fade, fly, slide } from 'svelte/transition';
 
 	/** @type {{data: import('./$types').PageData}} */
-	let { data } = $props();
+	let { data: page_data } = $props();
 	// console.log({ data });
 
     /** @type {{compress: (data: Uint8Array) => Uint8Array, decompress: (buffer: Uint8Array) => Uint8Array}} */
@@ -24,7 +24,7 @@
 	}
 
 	let trigger_definitions = $state(
-		data.trigger_definitions ??
+		page_data.trigger_definitions ??
 			`// Comments
 prop/path/1 -> prop/path/3 /* inline comments */
 prop/path/1 -> prop/path/2 : relationship`,
@@ -35,7 +35,7 @@ prop/path/1 -> prop/path/2 : relationship`,
     let autosave_changes = $state(true);
     let unsaved_changes = $state(false);
     let autosave_pause_remaining = new Tween(0, {easing: linear});
-    const MS_TO_WAIT_BEFORE_AUTOSAVE = 5_000;
+    const MS_TO_WAIT_BEFORE_AUTOSAVE = 10_000;
 	const debounced_triggers_to_url = debounced(
         /**
          * @param {string} tr
@@ -149,7 +149,7 @@ prop/path/1 -> prop/path/2 : relationship`,
 		let u = new URL(window.location.href);
 		u.searchParams.set("r", compressed);
 		// window.history.pushState({}, "", u.href);
-		goto(u.href, {keepFocus: true, replaceState: false})
+		goto(u.href, {keepFocus: true, replaceState: true})
 		return compressed;
 	}
 
@@ -420,6 +420,7 @@ prop/path/1 -> prop/path/2 : relationship`,
 			pl-[10px]
 			tree-node
 		`)}
+        class:highlighted={effect_paths_to_highlight.has(root_node.path) || source_paths_to_highlight.has(root_node.path)}
 		style:--hue={`${depth * 60}`}
 		style:--level={depth}
 		style:border-color={`lch(70% 100 var(--hue))`}
@@ -429,7 +430,7 @@ prop/path/1 -> prop/path/2 : relationship`,
 			class="key w-max flex items-center pointer-events-auto"
 			style:background-color="var(--override-bg, {source_paths_to_highlight.has(root_node.path) ? 'var(--highlight-yellow)' : (
 				'hsl(0 0% 100% / 80%)'
-			)}"
+			)})"
 			style:z-index="calc(100 - var(--level))"
 			onmouseenter={() => {
 				hover_paths.add(root_node.path);
@@ -482,7 +483,7 @@ prop/path/1 -> prop/path/2 : relationship`,
 				{root_node.key}/
 			{/if}
 		</div>
-		<div class="pl-4 pointer-events-none">
+		<div class="pl-4 pointer-events-none child-nodes">
 			{#each root_node.children ?? [] as child_node}
 				{@render tree_display(child_node, depth + 1)}
 			{/each}
@@ -529,6 +530,9 @@ prop/path/1 -> prop/path/2 : relationship`,
             debounced_triggers_to_url(trigger_definitions);
         }}
 	></textarea>
+    {#if page_data.error}
+        <span class="text-error-500">{page_data.error.message}</span>
+    {/if}
 
 	<div>
 		<span class="font-bold">Display relationship Text: </span>
@@ -628,6 +632,8 @@ prop/path/1 -> prop/path/2 : relationship`,
 
 <style>
 	.tree-node {
+        --line-width: 1px;
+
 		&:last-child::before {
 			border-color: lch(90% 10 var(--hue));
 			content: "";
@@ -635,7 +641,7 @@ prop/path/1 -> prop/path/2 : relationship`,
 			position: absolute;
 			border-style: solid;
 			border-left-width: 1px;
-			right: 100%;
+			left: -1px;
 			box-sizing: border-box;
 		}
 
@@ -648,16 +654,40 @@ prop/path/1 -> prop/path/2 : relationship`,
 			&::before {
 				content: "";
 				position: absolute;
-				right: calc(100% + 4px);
+				left: calc(0px - 11px - var(--line-width)*0.5);
 				height: 0.9rem;
-				bottom: calc(50% - 1px);
+				bottom: calc(50% - var(--line-width)*0.5);
 				width: 7px;
 				border-style: solid;
-				border-width: 1px;
+				border-width: var(--line-width);
 				border-color: inherit;
 				border-right: none;
 				border-top: none;
 			}
 		}
 	}
+
+    .tree-node.highlighted, .tree-node:has(.tree-node.highlighted) {
+        font-weight: 600;
+        --line-width: 3px;
+    }
+
+    .tree-node:has(.highlighted)::after, .tree-node.highlighted::after {
+        content: '';
+        position: absolute;
+        border-left: solid;
+        height: 5000px;
+        bottom: calc(100%);
+        left: calc(0px - 1px - var(--line-width)* 0.5);
+        border-color: inherit;
+    }
+
+    .tree-node > .child-nodes {
+        overflow: hidden;
+    }
+
+    .tree-node:not(:is(.highlighted, :has(.highlighted))){
+        font-weight: normal;
+        --line-width: 1px;
+    }
 </style>
