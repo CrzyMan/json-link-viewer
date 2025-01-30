@@ -1,44 +1,157 @@
 <script>
+	import { browser } from "$app/environment";
+    import { goto } from '$app/navigation';
+    import { page } from '$app/state';
 	import { SlideToggle } from "@skeletonlabs/skeleton";
+    import { tick } from 'svelte';
+    import { linear } from 'svelte/easing';
+    import { Tween } from 'svelte/motion';
 	import { SvelteSet } from "svelte/reactivity";
+    import { fade, fly, slide } from 'svelte/transition';
 
-	let trigger_definitions = $state(`// Comments
+	/** @type {{data: import('./$types').PageData}} */
+	let { data } = $props();
+	// console.log({ data });
+
+    /** @type {{compress: (data: Uint8Array) => Uint8Array, decompress: (buffer: Uint8Array) => Uint8Array}} */
+	let brotli;
+
+	if (browser) {
+		// @ts-ignore
+		import("https://unpkg.com/brotli-wasm@3.0.0/index.web.js?module")
+			.then((m) => m.default)
+			.then((b) => (brotli = b));
+	}
+
+	let trigger_definitions = $state(
+		data.trigger_definitions ??
+			`// Comments
 prop/path/1 -> prop/path/3 /* inline comments */
-prop/path/1 -> prop/path/2 : relationship`);
+prop/path/1 -> prop/path/2 : relationship`,
+	);
 
-	// let brotli;
+    let updating_url_ourselves = false;
 
-	// $effect(() => {
-	//     trigger_definitions;
-	//     (async () => {
-	//         if (!brotli) {
-	//             console.log("Loading Brotli");
-	//             let brotliPromise = await import("https://unpkg.com/brotli-wasm@3.0.0/index.web.js?module");
-	//             brotli = await brotliPromise.default;
-	//         } else {
-	//             console.log("Already loaded Brotli");
-	//         }
-	//         encode_string(trigger_definitions);
-	//     })();
-	// });
+    let autosave_changes = $state(true);
+    let unsaved_changes = $state(false);
+    let autosave_pause_remaining = new Tween(0, {easing: linear});
+    const MS_TO_WAIT_BEFORE_AUTOSAVE = 5_000;
+	const debounced_triggers_to_url = debounced(
+        /**
+         * @param {string} tr
+         */
+        (tr) => {
+            if (!autosave_changes){
+                return;
+            }
+            save_progress_to_url(tr);
+            
+        },
+        MS_TO_WAIT_BEFORE_AUTOSAVE
+    );
 
-	// /**
-	//  * @param str
-	//  * @returns {string}
-	//  */
-	// function encode_string(str) {
-	//     console.log("raw string length: ", trigger_definitions.length);
-	//     console.log("btoa string length: ", btoa(trigger_definitions).length);
-	//     let uncompressed_raw_data = new TextEncoder().encode(trigger_definitions);
-	//     let uncompressed_btoa_data = new TextEncoder().encode(btoa(trigger_definitions));
-	//     /** @type {Uint8Array}*/
-	//     let compressed_raw_data = brotli.compress(uncompressed_raw_data);
-	//     let compressed_btoa_data = brotli.compress(uncompressed_btoa_data);
-	//     console.log("raw string to compressed Uint8[] length: ", compressed_raw_data.length);
-	//     console.log("btoa string to compressed Uint8[] length: ", compressed_btoa_data.length);
+    /**
+     * @param {string} tr
+     */
+    async function save_progress_to_url(tr){
+        updating_url_ourselves = true;
+        add_triggers_to_url(tr);
+        unsaved_changes = false;
 
-	//     return "";
-	// }
+        // Let page effect trigger while it shouldn't care
+        await pause_for(100); 
+        updating_url_ourselves = false;
+    }
+
+    /**
+     * @param {number} [duration_ms=0]
+     * @returns {Promise<void>}
+     */
+    function pause_for(duration_ms = 0){
+        return new Promise(res => {
+            setTimeout(res, duration_ms);
+        });
+    }
+
+    // Update the triggers when the URL changes on us (not when we do it)
+    $effect(() => {
+        page.url.search;
+        if (updating_url_ourselves) {
+            return;
+        }
+        use_triggers_from_url();
+    })
+
+	/**
+	 * @param {string} str
+	 * @returns {string}
+	 */
+	function encode_string(str) {
+		if (!brotli) return "";
+		const textEncoder = new TextEncoder();
+		const uncompressedData = textEncoder.encode(str);
+        // @ts-ignore
+		const compressedBuffer = brotli.compress(uncompressedData);
+		const compressed_string = compressed_buffer_to_string(compressedBuffer);
+		return compressed_string;
+	}
+
+	/**
+	 * @param {string} compressed_string
+	 * @returns {string}
+	 */
+	function decode_string(compressed_string) {
+		console.log("decoding");
+		if (!brotli) return "";
+		const textDecoder = new TextDecoder();
+		const compressed_buffer_from_string = compressed_string_to_buffer(compressed_string);
+        // @ts-ignore
+		const decompressedData = brotli.decompress(compressed_buffer_from_string);
+		const decompressed_string = textDecoder.decode(decompressedData);
+		return decompressed_string;
+	}
+
+	/**
+	 * @param {*} buff
+	 */
+	function compressed_buffer_to_string(buff) {
+		return btoa(String.fromCharCode.apply(null, buff));
+	}
+
+	/**
+	 * @param {string} str
+	 */
+	function compressed_string_to_buffer(str) {
+		return new Uint8Array([...atob(str)].map((c) => c.charCodeAt(0)));
+	}
+
+	function use_triggers_from_url() {
+		if (!brotli) {
+			return;
+		}
+		let u = new URL(window.location.href);
+		let compressed = u.searchParams.get("r");
+		if (!compressed) {
+			return;
+		}
+		let decompressed = decode_string(compressed);
+		trigger_definitions = decompressed;
+	}
+
+	/**
+	 * @param {string} triggers
+	 */
+	function add_triggers_to_url(triggers) {
+		if (!brotli) {
+			return;
+		}
+		let compressed = encode_string(triggers);
+		let u = new URL(window.location.href);
+		u.searchParams.set("r", compressed);
+		// window.history.pushState({}, "", u.href);
+		goto(u.href, {keepFocus: true, replaceState: false})
+		return compressed;
+	}
 
 	/**
 	 @typedef {string} SchemaPath e.g. 'path/to/{dynamic}/resource'
@@ -180,7 +293,6 @@ prop/path/1 -> prop/path/2 : relationship`);
 		let trigger_def_array = markdown_to_path_defs(trigger_definitions);
 
 		let on_page_svg = document.querySelector("svg");
-		console.log(on_page_svg);
 
 		let svg_rect = on_page_svg?.getBoundingClientRect();
 		if (!svg_rect) {
@@ -230,15 +342,24 @@ prop/path/1 -> prop/path/2 : relationship`);
 	}
 
 	/**
-	 * @param {() => void} callback
+     * @template {(...args: any) => any} T
+	 * @param {T} callback
+	 * @param {number} [timeout_ms=100]
 	 */
-	function debounced(callback) {
+	function debounced(callback, timeout_ms = 100) {
 		/** @type {any} */
 		let timeout_id;
-		return () => {
+
+		/**
+		 * @param {Parameters<T>} args
+		 */
+		const result = (...args) => {
 			clearTimeout(timeout_id);
-			timeout_id = setTimeout(callback, 100);
+			timeout_id = setTimeout(() => {
+				callback(...args)
+			}, timeout_ms);
 		};
+		return result;
 	}
 
 	function regenerate_svg() {
@@ -280,9 +401,12 @@ prop/path/1 -> prop/path/2 : relationship`);
 	let show_text_always_toggle = $state(false);
 	/** @type {"always" | "hover"} */
 	let relationship_text_display = $derived(show_text_always_toggle ? "always" : "hover");
+
 </script>
 
-<svelte:window onresize={debounced(regenerate_svg)} />
+<svelte:window 
+    onresize={debounced(regenerate_svg)} 
+/>
 
 {#snippet tree_display(/** @type {TreeNode} */ n, depth = 0)}
 	{@const root_node = /** @type {TreeNode} */ (n)}
@@ -309,44 +433,44 @@ prop/path/1 -> prop/path/2 : relationship`);
 			style:z-index="calc(100 - var(--level))"
 			onmouseenter={() => {
 				hover_paths.add(root_node.path);
-				console.log("hover paths: ", [...hover_paths]);
+				// console.log("hover paths: ", [...hover_paths]);
 
 				if (root_node.effects.length > 0) {
-					console.log(`ADDING SOURCE ${root_node.path}`);
+					// console.log(`ADDING SOURCE ${root_node.path}`);
 					source_paths_to_highlight.add(root_node.path);
 					for (let effect of root_node.effects) {
-						console.log(`> ADDING EFFECT ${effect.path}`);
+						// console.log(`> ADDING EFFECT ${effect.path}`);
 						effect_paths_to_highlight.add(effect.path);
 					}
 				}
 
 				if (root_node.sources.length > 0) {
-					console.log(`ADDING EFFECT ${root_node.path}`);
+					// console.log(`ADDING EFFECT ${root_node.path}`);
 					effect_paths_to_highlight.add(root_node.path);
 					for (let source of root_node.sources) {
-						console.log(`> ADDING SOURCE ${source.path}`);
+						// console.log(`> ADDING SOURCE ${source.path}`);
 						source_paths_to_highlight.add(source.path);
 					}
 				}
 			}}
 			onmouseleave={() => {
 				hover_paths.delete(root_node.path);
-				console.log("hover paths: ", [...hover_paths]);
+				// console.log("hover paths: ", [...hover_paths]);
 
 				if (root_node.effects.length > 0) {
-					console.log(`DELETING SOURCE ${root_node.path}`);
+					// console.log(`DELETING SOURCE ${root_node.path}`);
 					source_paths_to_highlight.delete(root_node.path);
 					for (let effect of root_node.effects) {
-						console.log(`> DELETING EFFECT ${effect.path}`);
+						// console.log(`> DELETING EFFECT ${effect.path}`);
 						effect_paths_to_highlight.delete(effect.path);
 					}
 				}
 
 				if (root_node.sources.length > 0) {
-					console.log(`DELETING EFFECT ${root_node.path}`);
+					// console.log(`DELETING EFFECT ${root_node.path}`);
 					effect_paths_to_highlight.delete(root_node.path);
 					for (let source of root_node.sources) {
-						console.log(`> DELETING SOURCE ${source.path}`);
+						// console.log(`> DELETING SOURCE ${source.path}`);
 						source_paths_to_highlight.delete(source.path);
 					}
 				}
@@ -366,15 +490,49 @@ prop/path/1 -> prop/path/2 : relationship`);
 	</div>
 {/snippet}
 
-<div class="p-6 font-mono space-y-5">
+<div class="p-6 space-y-5">
+    <div class="space-x-4">
+        <button 
+            class="btn btn-sm variant-filled min-w-[30ch] transition-all relative rounded overflow-hidden"
+            disabled={!unsaved_changes}
+            onclick={() => save_progress_to_url(trigger_definitions)}
+        >
+            {#if unsaved_changes}
+                {#if autosave_changes}
+                    Autosaving In A Bit
+                    <div 
+                    style:width={`${autosave_pause_remaining.current}%`}
+                    class="absolute left-0 bottom-0 border-b-4 border-white opacity-50 right-0"
+                ></div>
+                {:else}
+                    Save Changes
+                {/if}
+            {:else}
+                No Changes To Save
+            {/if}
+            
+        </button>
+        <div class="inline">
+    		<span class="font-bold">Autosave as you type:</span>
+    		<input type="checkbox" name="autosave" id="autosave" bind:checked={autosave_changes}>
+            <span class="text-gray-600 ml-2 text-sm">Data is saved to the URL. No cookies, localdata, or transmissions. I don't want your data.</span>
+        </div>
+	</div>
+
 	<textarea
-		class="w-full h-[13rem] rounded"
+		class="w-full h-[13rem] rounded font-mono"
 		bind:value={trigger_definitions}
+        oninput={async () => {
+            unsaved_changes = true;
+            await autosave_pause_remaining.set(100, {duration: 0});
+            autosave_pause_remaining.set(0, {duration: MS_TO_WAIT_BEFORE_AUTOSAVE});
+            debounced_triggers_to_url(trigger_definitions);
+        }}
 	></textarea>
 
 	<div>
-		<h2 class="h3">Display relationship Text</h2>
-		<label class="flex items-center gap-2">
+		<span class="font-bold">Display relationship Text: </span>
+		<label class="inline-flex items-center gap-2">
 			<span>On Hover</span>
 			<SlideToggle
 				name="show_text_on_hover_or_always"
@@ -386,7 +544,7 @@ prop/path/1 -> prop/path/2 : relationship`);
 	</div>
 
 	<div
-		class="bg-white rounded px-4 py-2 relative z-0 tree-holder"
+		class="bg-white rounded px-4 py-2 relative z-0 tree-holder font-mono"
 		style:--highlight-yellow="rgb(254 240 138 / 80%)"
 	>
 		<div>
