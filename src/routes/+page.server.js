@@ -1,4 +1,4 @@
-import { brotliDecompressSync } from "node:zlib";
+import { brotliDecompressSync } from "zlib";
 
 /**
  * @param {string} compressed_string
