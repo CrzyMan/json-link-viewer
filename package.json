@@ -27,6 +27,7 @@
 	"type": "module",
 	"dependencies": {
 		"@sveltejs/adapter-cloudflare": "^4.7.2",
-		"highlight.js": "^11.10.0"
+		"highlight.js": "^11.10.0",
+		"zlib": "^1.0.5"
 	}
 }
