@@ -1,2 +1,12 @@
+name="json-link-viewer"
+account_id="c2188d6cd5a6aaccd26ce10a6db94d2d"
+
 compatibility_flags = ["nodejs_compat", "nodejs_compat"]
 compatibility_date = "2024-09-23"
+main="./.cloudflare/worker.js"
+
+[site]
+bucket="./.cloublare/public"
+
+[build]
+command="npm run build"
