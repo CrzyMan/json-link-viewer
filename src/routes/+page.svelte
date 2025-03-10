@@ -9,9 +9,10 @@
 	import { SvelteSet } from "svelte/reactivity";
     import { fade, fly, slide } from 'svelte/transition';
 
-	/** @type {{data: import('./$types').PageData}} */
-	let { data: page_data } = $props();
-	// console.log({ data });
+    /**
+     * @type {{error: {message: string} | null}}
+     */
+	let page_state = $state({error: null});
 
     /** @type {{compress: (data: Uint8Array) => Uint8Array, decompress: (buffer: Uint8Array) => Uint8Array}} */
 	let brotli;
@@ -20,14 +21,20 @@
 		// @ts-ignore
 		import("https://unpkg.com/brotli-wasm@3.0.0/index.web.js?module")
 			.then((m) => m.default)
-			.then((b) => (brotli = b));
+			.then((b) => (brotli = b))
+            .then(() => {
+                if (page.url.searchParams.get('r')){
+                    use_triggers_from_url();
+                }
+            })
 	}
 
 	let trigger_definitions = $state(
-		page_data.trigger_definitions ??
+		!page.url.searchParams.get('r') ?
 			`// Comments
 prop/path/1 -> prop/path/3 /* inline comments */
-prop/path/1 -> prop/path/2 : relationship`,
+prop/path/1 -> prop/path/2 : relationship` 
+            : ''
 	);
 
     let updating_url_ourselves = false;
@@ -101,15 +108,29 @@ prop/path/1 -> prop/path/2 : relationship`,
 	 * @returns {string}
 	 */
 	function decode_string(compressed_string) {
-		console.log("decoding");
 		if (!brotli) return "";
 		const textDecoder = new TextDecoder();
 		const compressed_buffer_from_string = compressed_string_to_buffer(compressed_string);
-        // @ts-ignore
-		const decompressedData = brotli.decompress(compressed_buffer_from_string);
+		const {data: decompressedData, error: decompress_error} = /** @type {{data: Uint8Array; error: null} | {data: null; error: string}} */ (safe_try(() => brotli.decompress(compressed_buffer_from_string)));
+        if (decompress_error || !decompressedData){
+            console.log('there was an error: ', decompress_error)
+            page_state.error = {message: `Unable to read the trigger definitions from the URL`};
+            return "";
+        }
 		const decompressed_string = textDecoder.decode(decompressedData);
 		return decompressed_string;
 	}
+
+    /**
+     * @param {(...args: any[]) => any} callback
+     */
+    function safe_try(callback) {
+        try {
+            return {data: callback(), error: null}
+        } catch (e) {
+            return { data: null,  error: e };
+        }
+    }
 
 	/**
 	 * @param {*} buff
@@ -530,8 +551,8 @@ prop/path/1 -> prop/path/2 : relationship`,
             debounced_triggers_to_url(trigger_definitions);
         }}
 	></textarea>
-    {#if page_data.error}
-        <span class="text-error-500">{page_data.error.message}</span>
+    {#if page_state.error}
+        <span class="text-error-500">{page_state.error.message}</span>
     {/if}
 
 	<div>
