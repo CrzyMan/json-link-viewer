@@ -6,7 +6,7 @@ import { brotliDecompressSync } from 'node:zlib';
  * @property {string} message
  * @property {string} [detail]
  * @property {string} [suggestion]
- * @property {MyError} [stack]
+ * @property {MyError | any} [stack]
  */
 
 /**
@@ -38,6 +38,7 @@ function decompress(compressed_string) {
             error: {
                 code: "invalid_data",
                 message: `Could not decompress string`,
+                stack: e
             },
         };
     }
@@ -57,6 +58,7 @@ prop/path/1 -> prop/path/3 /* inline comments */
 prop/path/1 -> prop/path/2 : relationship`;
 
     let compressed = url.searchParams.get("r");
+    console.log(compressed);
 
     if (!compressed) {
         return { 
@@ -67,12 +69,13 @@ prop/path/1 -> prop/path/2 : relationship`;
     let { data: decompressed_data, error: decompression_error } = decompress(compressed);
 
     if (decompression_error){
+        console.trace(decompression_error);
         return {
             trigger_definitions: default_trigger_definitions, 
             error: {
                 code: 'invalid_search',
                 message: `Could not parse the URL into trigger definitions`,
-                stack: decompression_error
+                stack: `${decompression_error}`
             }
         };
     }
