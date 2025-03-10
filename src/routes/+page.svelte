@@ -569,7 +569,7 @@ prop/path/1 -> prop/path/2 : relationship`
 	</div>
 
 	<div
-		class="bg-white rounded px-4 py-2 relative z-0 tree-holder font-mono"
+		class="bg-white rounded px-4 py-2 relative z-0 tree-holder font-mono overflow-hidden"
 		style:--highlight-yellow="rgb(254 240 138 / 80%)"
 	>
 		<div>
